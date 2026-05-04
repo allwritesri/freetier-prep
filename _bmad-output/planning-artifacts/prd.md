@@ -1,6 +1,7 @@
 ---
 stepsCompleted:
   - step-01-init
+  - step-01b-continue
 inputDocuments:
   - _bmad-output/planning-artifacts/product-brief-freetier-prep.md
   - _bmad-output/planning-artifacts/product-brief-freetier-prep-distillate.md
