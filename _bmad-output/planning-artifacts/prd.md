@@ -3,6 +3,7 @@ stepsCompleted:
   - step-01-init
   - step-01b-continue
   - step-02-discovery
+  - step-02b-vision
 inputDocuments:
   - _bmad-output/planning-artifacts/product-brief-freetier-prep.md
   - _bmad-output/planning-artifacts/product-brief-freetier-prep-distillate.md
