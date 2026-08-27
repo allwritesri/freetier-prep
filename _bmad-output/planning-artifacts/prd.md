@@ -5,6 +5,7 @@ stepsCompleted:
   - step-02-discovery
   - step-02b-vision
   - step-02c-executive-summary
+  - step-03-success
 inputDocuments:
   - _bmad-output/planning-artifacts/product-brief-freetier-prep.md
   - _bmad-output/planning-artifacts/product-brief-freetier-prep-distillate.md
@@ -86,3 +87,118 @@ The product is structurally different from sandbox-lab incumbents along three di
 2. **Cost-Safety & Teardown Convergence** — per-lab cost ceiling, budget-alert wiring into the student's project, idle detection, teardown idempotency and convergence guarantees, orphaned-resource detection, partial-failure handling. *Zero* teardown-failure-resulting-in-surprise-bill incidents is a North Star input, not a stretch goal.
 3. **Provisioning SLO & Validation Harness** — <60s cold-start budget decomposed (auth, plan, apply, validate), the per-task outcome-validation contract (reachability, least-privilege IAM, configuration-meets-requirement — not just resource existence), retry/idempotency on provisioning, failure taxonomy.
 4. **State Ownership & Portability** — state lives in `gs://freetier-prep-<student-uuid>-state/sessions/<session-id>/terraform.tfstate` in the *student's* project, with versioning, encryption at rest, optional CMEK, and 30-day lifecycle cleanup. Lock-in/portability story, deletion-mid-lab handling, recovery from corrupt state.
+
+## Success Criteria
+
+### User Success
+
+A student who completes the MVP module experiences three measurable wins, in this order:
+
+1. **First-time setup converts.** They finish the WIF connection ceremony and arrive at the lab launch screen **in under 5 minutes**, without dropping off. The brief identifies setup friction as the failure mode that kills DIY-in-own-account learners; this is the highest-leverage funnel point at MVP.
+2. **They produce real artifacts they can show an employer.** At lab end, the Terraform repo and signed transcript land in their GitHub. ≥95% of completions produce a clean repo (no commit failure, no push failure, signature verifies) — provisional engineering target, to be firmed at NFR definition.
+3. **They feel safe doing it.** Zero surprise-bill incidents in the first 200 completions. The End Lab → "zero resources" verification holds without manual support intervention.
+
+The emotional success moment is the brief's **aha**: refresh the GCP console post-teardown → zero resources → refresh GitHub → signed Terraform repo waiting. That sequence is what we instrument; if it doesn't happen, nothing else matters.
+
+### Business Success
+
+**North Star: 2x cloud-job placement rate vs. theory-only ACE courses** at 12 months. Measured by surveying users 3 and 6 months post-completion against a control cohort from common theory-only ACE courses (self-reported, augmented by LinkedIn signal where consented).
+
+**Why this metric, not the obvious alternatives:**
+
+- *Exam pass rate* — every incumbent instruments this; correlates poorly with workplace performance; doesn't distinguish freetier-prep from sandbox labs.
+- *Hours watched* — theory-course metric; adopting it loses the category bet.
+- *Module completion rate* — leading indicator, not North Star (see below).
+
+**Near-term proxy** (because job-placement signal lags 6–12 months): completion of an **end-of-track interview-style mock-scenario walkthrough**. Correlates with workplace performance more reliably than pass rate. Ships once ≥3 modules exist.
+
+**12-month operational metrics:**
+
+| Metric | Target | Industry baseline |
+|---|---|---|
+| Module completion rate | ≥ 60% | 15–25% |
+| Teardown-failure incidents resulting in surprise bills | **0** (not "low") | n/a — competitors don't expose users to this |
+| NPS (launch-module cohort) | ≥ 60 | n/a |
+
+**12-month leading indicators:** 2,000+ GCP accounts connected; 500+ launch-module completions; ≥40% of users acquired via referral.
+
+### Technical Success
+
+The four grafted PRD sections (cross-account trust, cost-safety/teardown, provisioning SLO, state ownership) earn their keep here. Technical success isn't parallel to user/business success — it gates them.
+
+| Capability | Success criterion | Why it matters |
+|---|---|---|
+| **Provisioning SLO** | p95 cold-start (auth → plan → apply → "ready") **< 60s**; p99 < 90s | Sub-minute is the brief's commitment; over-budget kills the wedge |
+| **Teardown convergence** | **Zero** resource-leak incidents resulting in surprise bills; idempotent + resumable; orphan detection on every End Lab | Single failure mode that kills word-of-mouth and the company |
+| **Trust posture** | Zero long-lived service-account keys; WIF tokens expire ≤12h; per-module IAM bindings public in linked GitHub repo | Earns the right to ask for a binding into a billing account |
+| **Validation depth** | 100% of MVP tasks validate against outcome-based checks (reachability / least-privilege / configuration-meets-requirement) — not "resource exists" | Differentiates from sandbox-incumbent shallow validators |
+| **Artifact integrity** | 100% of completions emit signed transcript + Terraform repo to student's GitHub; signature verifiable by hiring manager in <10s | The credential is the moat; signature failure breaks the category bet |
+
+### Measurable Outcomes
+
+Single-line targets, by horizon:
+
+- **3-month (post-MVP launch):** 200 unique GCP accounts connected; 100 launch-module completions; 0 surprise-bill incidents; teardown loop validated under failure injection.
+- **6-month:** 1,000 connections; 250 completions; ≥40% completion rate (en route to ≥60%); first signed-transcript verification by an external hiring manager.
+- **12-month:** 2,000+ connections; 500+ completions; ≥60% completion rate; NPS ≥60; North Star measurement cohort started; ≥40% referral acquisition.
+
+## Product Scope
+
+### MVP - Minimum Viable Product
+
+The discipline rule from the brief: *if it isn't required to validate the wedge claim — "one real-account hands-on GCP lab that ACE candidates trust enough to grant a Workload Identity binding to" — it does not belong in MVP.*
+
+**In:**
+
+- One lab module: *"Your first VPC: networks, instances, and secure SSH"* (10–12 outcome-validated tasks, runs entirely on GCP always-free tier)
+- GCP-only, ACE track only
+- Workload Identity Federation account connection (short-lived OIDC tokens, never long-lived keys)
+- Provisioning engine (Terraform-based control plane)
+- Outcome-validation engine (per-task validators run from platform against student's project via OIDC token)
+- State-driven Terraform teardown (canonical mechanism; sweeper deferred entirely from MVP)
+- Pre-flight credit estimate displayed before lab start
+- Signed completion transcript + auto-commit Terraform artifact to student's GitHub
+- Free service (no payment infrastructure)
+- Manual support channel for incidents
+- Public GitHub repo of the exact IAM bindings the platform requests
+
+**Out** (deferred to v2 or explicitly rejected):
+
+- Additional lab modules (ship only if module 1 proves the loop)
+- Instructor authoring + marketplace + ratings + reviews
+- Multi-cloud (AWS, Azure)
+- Additional cert tracks (PCA, AWS SAA, Azure Admin)
+- Paid plans, billing, subscription, rev-share infrastructure
+- Enterprise / team accounts
+- Mobile app
+- Validity-score engine for instructor-uploaded content
+- Cost-overage refund / insurance program (rejected — engineered for, not promised)
+- Sweeper as primary teardown (rejected — state-driven destroy is canonical)
+- Storing Terraform state platform-side (rejected — state lives in student's bucket; trust positioning)
+
+### Growth Features (Post-MVP)
+
+Gated on the MVP loop validating.
+
+**Months 3–9:**
+
+- Expand to 8–12 modules covering the full ACE blueprint
+- Begin North Star measurement cohort (job-placement survey infrastructure)
+- First paid track at $5–10 per cert track once content depth justifies it
+- End-of-track interview-style mock-scenario walkthrough (near-term North Star proxy)
+
+**Months 9–18:**
+
+- Professional Cloud Architect (PCA) track
+- Begin AWS expansion (separate launch with proven engine; AWS-credit-anxiety story still fresh post-July-2025 Free Tier overhaul)
+- Instructor authoring beta — first 10–20 curated community instructors, validity-score gate
+
+### Vision (Future)
+
+18–36 months:
+
+- Open marketplace at scale (instructor labs alongside videos, rev-share)
+- Multi-cloud parity (AWS, Azure)
+- Hiring-side flywheel: companies subscribe to verify candidate signed transcripts; product becomes infrastructure for cloud hiring rather than a study tool
+- Cost-safety engine licensable as a B2B2C primitive to bootcamps, universities, enterprise L&D (v3+ wedge)
+- Positioning destination: *"the Udemy of cloud labs and the de facto verifiable hands-on credential for cloud hiring"*
