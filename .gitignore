@@ -7,3 +7,9 @@ node_modules/
 .idea/
 dist/
 build/
+
+# app runtime state (keys, sqlite, emitted artifacts)
+app/var/
+__pycache__/
+*.pyc
+.pytest_cache/

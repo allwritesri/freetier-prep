@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}freetier-prep{% endblock %}</title>
+  <style>
+    :root { color-scheme: light; }
+    body { font-family: system-ui, sans-serif; margin: 0; background: #f6f7f9;
+           color: #1c2333; padding-inline: 16px; }
+    main { max-width: 860px; margin: 0 auto; padding-block: 24px; }
+    h1 { font-size: 1.4rem; } h2 { font-size: 1.1rem; margin-top: 1.6em; }
+    .card { background: #fff; border: 1px solid #e3e6ec; border-radius: 10px;
+            padding: 16px 20px; margin-block: 12px; }
+    .ok { color: #0a7d33; } .bad { color: #b3261e; }
+    .muted { color: #667085; font-size: .9rem; }
+    button { background: #2242c9; color: #fff; border: 0; border-radius: 7px;
+             padding: 7px 14px; cursor: pointer; font-size: .95rem; }
+    button.ghost { background: #eef1f8; color: #2242c9; }
+    button.danger { background: #b3261e; }
+    input[type=email], input[type=text] { padding: 7px 10px; border: 1px solid
+             #c8cdd8; border-radius: 7px; font-size: .95rem; }
+    form.inline { display: inline; }
+    table { border-collapse: collapse; width: 100%; }
+    td, th { text-align: left; padding: 6px 8px; border-bottom: 1px solid #eef0f4;
+             font-size: .92rem; }
+    code { background: #eef1f8; padding: 1px 5px; border-radius: 4px; }
+    a { color: #2242c9; }
+    .pill { display: inline-block; border-radius: 99px; padding: 2px 10px;
+            font-size: .8rem; background: #eef1f8; }
+    .pill.active { background: #e6f4ea; color: #0a7d33; }
+    .pill.teardown_failed { background: #fdecea; color: #b3261e; }
+  </style>
+</head>
+<body>
+<main>
+  <p class="muted"><a href="/">freetier-prep</a> · dev mode ·
+     <a href="/ops">ops</a></p>
+  {% block content %}{% endblock %}
+</main>
+</body>
+</html>

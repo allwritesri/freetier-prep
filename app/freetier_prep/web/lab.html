@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}{{ lab.title }}{% endblock %}
+{% block content %}
+<h1>{{ lab.title }}</h1>
+<p class="muted">Session <code>{{ session.id }}</code> ·
+   status <span class="pill {{ session.status }}">{{ session.status }}</span></p>
+
+<div class="card">
+  <h2>Live resources in your project</h2>
+  {% if live_resources %}
+    <p>{% for r in live_resources %}<code>{{ r }}</code> {% endfor %}</p>
+  {% else %}
+    <p class="ok">Zero session resources — nothing running.</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>Tasks {{ tasks | selectattr('validated') | list | length }}/{{ tasks | length }}</h2>
+  <table>
+    {% for t in tasks %}
+    <tr>
+      <td>{% if t.validated %}<span class="ok">✔</span>{% else %}·{% endif %}</td>
+      <td><strong>{{ t.title }}</strong><br>
+          <span class="muted">{{ t.instructions }}</span></td>
+      <td style="white-space:nowrap">
+        {% if session.status == 'active' and not t.validated %}
+        {% if mode != 'real' %}
+        <form class="inline" method="post"
+              action="/lab/{{ session.id }}/task/{{ t.id }}/simulate">
+          <button class="ghost" title="Dev mode: perform the console action">
+            do it (dev)</button>
+        </form>
+        {% endif %}
+        <form class="inline" method="post"
+              action="/lab/{{ session.id }}/task/{{ t.id }}/validate">
+          <button>validate</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+
+{% if session.status == 'active' %}
+<form method="post" action="/lab/{{ session.id }}/end">
+  <button class="danger">End Lab — destroy everything, keep my artifacts</button>
+</form>
+{% endif %}
+{% endblock %}

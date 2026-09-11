@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Your first VPC — in <em>your own</em> cloud account</h1>
+
+{% if not user %}
+<div class="card">
+  <h2>Connect your GCP project</h2>
+  <p class="muted">Dev mode simulates the one-time Workload Identity Federation
+  setup: short-lived tokens, never long-lived keys. State stays in
+  <em>your</em> bucket.</p>
+  <form method="post" action="/connect">
+    <input type="email" name="email" placeholder="you@example.com" required>
+    <button type="submit">Connect (under 5 minutes)</button>
+  </form>
+</div>
+{% else %}
+<div class="card">
+  <strong>{{ user.email }}</strong> · project <code>{{ user.project_id }}</code>
+</div>
+
+<div class="card">
+  <h2>Pre-flight checks</h2>
+  <table>
+    {% for c in preflight.checks %}
+    <tr>
+      <td>{% if c.ok %}<span class="ok">✔</span>{% else %}<span class="bad">✘</span>{% endif %}</td>
+      <td>{{ c.name }}</td>
+      <td class="muted">{{ c.remediation }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% if active %}
+    <p><a href="/lab/{{ active.id }}"><button>Open running lab</button></a></p>
+  {% elif preflight.ok %}
+    <form method="post" action="/start">
+      <input type="hidden" name="lab_id" value="first-vpc">
+      <button type="submit">Start Lab — estimate $0.00</button>
+    </form>
+  {% else %}
+    <p class="bad">Start is blocked until every check passes — nothing will be
+    provisioned.</p>
+  {% endif %}
+</div>
+
+{% if sessions %}
+<div class="card">
+  <h2>Sessions</h2>
+  <table>
+    {% for s in sessions %}
+    <tr>
+      <td><code>{{ s.id }}</code></td>
+      <td><span class="pill {{ s.status }}">{{ s.status }}</span></td>
+      <td>{% if s.status == 'active' %}<a href="/lab/{{ s.id }}">open</a>{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
+
+{% if notifications %}
+<div class="card">
+  <h2>Notifications</h2>
+  {% for n in notifications %}
+  <p class="muted"><strong>{{ n.kind }}:</strong> {{ n.message }}</p>
+  {% endfor %}
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}

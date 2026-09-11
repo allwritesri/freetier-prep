@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Ops{% endblock %}
+{% block content %}
+<h1>Operations</h1>
+<div class="card">
+  <h2>Sessions</h2>
+  <table>
+    <tr><th>id</th><th>lab</th><th>status</th><th>ttl deadline</th><th></th></tr>
+    {% for s in sessions %}
+    <tr>
+      <td><code>{{ s.id }}</code></td>
+      <td>{{ s.lab_id }}</td>
+      <td><span class="pill {{ s.status }}">{{ s.status }}</span></td>
+      <td class="muted">{{ s.ttl_deadline | round(0) }}</td>
+      <td>{% if s.status == 'teardown_failed' %}
+        <form class="inline" method="post"
+              action="/api/ops/force-sweep/{{ s.id }}">
+          <button class="danger">force sweep</button></form>
+      {% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+<div class="card">
+  <h2>Escalations</h2>
+  {% for e in escalations %}
+  <p><code>{{ e.session_id }}</code>
+     {% if e.resolved %}<span class="ok">resolved</span>
+     {% else %}<span class="bad">OPEN</span>{% endif %}<br>
+     <span class="muted">{{ e.reason }} — manifest:
+     {{ e.resource_manifest }}</span></p>
+  {% else %}
+  <p class="ok">No escalations. Zero-surprise-bill holding.</p>
+  {% endfor %}
+</div>
+{% endblock %}
