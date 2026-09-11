@@ -10,13 +10,11 @@ operator's convergence hammer (still label-scoped).
 import json
 
 from .db import Database
-from .fake_gcp import DeletePoisoned, FakeGCP, SESSION_LABEL
-from .provisioner import SimulatedProvisioner
+from .fake_gcp import SESSION_LABEL
 
 
 def teardown_session(
-    db: Database, gcp: FakeGCP, provisioner: SimulatedProvisioner,
-    session, reason: str, max_retries: int = 3,
+    db: Database, gcp, provisioner, session, reason: str, max_retries: int = 3,
 ) -> dict:
     sid = session["id"]
     db.set_session_status(sid, "ending")
@@ -37,8 +35,8 @@ def teardown_session(
                 "Verified: 0 session resources remaining. Your progress is saved.",
             )
             return {"ok": True, "report": report}
-        except DeletePoisoned as exc:
-            last_error = str(exc)
+        except Exception as exc:  # any failed delete/subprocess is retryable
+            last_error = str(exc)[:500]
 
     manifest = provisioner.session_resource_manifest(
         session["project_id"], sid, _bucket(session)
@@ -55,18 +53,22 @@ def teardown_session(
     return {"ok": False, "error": last_error, "manifest": manifest}
 
 
-def force_sweep(
-    db: Database, gcp: FakeGCP, provisioner: SimulatedProvisioner, session
-) -> dict:
-    """Operator hammer: clear poison-independent leftovers by label, verify zero."""
+def force_sweep(db: Database, gcp, provisioner, session) -> dict:
+    """Operator hammer: converge to zero inside the blast-radius boundary
+    (session label in dev; the lab-known name set in real mode)."""
     sid = session["id"]
     project_id = session["project_id"]
-    for res in gcp.list_resources(project_id, label=(SESSION_LABEL, sid)):
-        gcp.heal_delete(project_id, res.name)
-        gcp.delete_resource(project_id, res.name)
-    remaining = gcp.list_resources(project_id, label=(SESSION_LABEL, sid))
+    if hasattr(gcp, "heal_delete"):  # dev/fake: label-scoped
+        for res in gcp.list_resources(project_id, label=(SESSION_LABEL, sid)):
+            gcp.heal_delete(project_id, res.name)
+            gcp.delete_resource(project_id, res.name)
+        remaining = [r.name for r in gcp.list_resources(
+            project_id, label=(SESSION_LABEL, sid))]
+    else:  # real: name-scoped sweep + survey
+        gcp.sweep_lab_resources()
+        remaining = [r["name"] for r in gcp.lab_resource_survey()]
     if remaining:
-        return {"ok": False, "remaining": [r.name for r in remaining]}
+        return {"ok": False, "remaining": remaining}
     db.set_session_status(sid, "torn_down")
     db.resolve_escalations(sid)
     db.notify(

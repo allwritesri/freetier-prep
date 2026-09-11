@@ -22,6 +22,20 @@ class Settings:
     teardown_max_retries: int = field(
         default_factory=lambda: int(os.environ.get("FTP_TEARDOWN_RETRIES", "3"))
     )
+    # own-account (real) mode
+    project_id: str = field(
+        default_factory=lambda: os.environ.get("FTP_PROJECT", "")
+    )
+    state_bucket: str = field(
+        default_factory=lambda: os.environ.get("FTP_STATE_BUCKET", "")
+    )
+    terraform_bin: str = field(
+        default_factory=lambda: os.environ.get("FTP_TERRAFORM_BIN", "terraform")
+    )
+
+    @property
+    def tf_dir(self) -> Path:
+        return self.var_dir / "tf"
 
     @property
     def db_path(self) -> Path:

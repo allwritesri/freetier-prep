@@ -39,10 +39,28 @@ class DevConnector(Connector):
                      expires_in_seconds=12 * 3600)
 
 
+class AdcConnector(Connector):
+    """Own-account mode: the operator's own project via Application Default
+    Credentials. No WIF ceremony needed — you are connecting to yourself,
+    with short-lived local credentials and no key files."""
+
+    def __init__(self, gcp, project_id: str, state_bucket: str | None = None):
+        self.gcp = gcp  # RealGCP
+        self.project_id = project_id
+        self.state_bucket = state_bucket or f"freetier-prep-state-{project_id}"
+
+    def connect(self, user_email: str) -> Grant:
+        self.gcp.ensure_bucket(self.project_id, self.state_bucket)
+        return Grant(project_id=self.project_id, state_bucket=self.state_bucket,
+                     expires_in_seconds=3600)
+
+
 class WIFConnector(Connector):
-    """Production connector — Workload Identity Federation. Not in MVP dev scope."""
+    """Hosted-platform connector — Workload Identity Federation for OTHER
+    people's accounts. Not in MVP scope; AdcConnector covers own-account."""
 
     def connect(self, user_email: str) -> Grant:
         raise NotImplementedError(
-            "WIF connector is production-only; run with FTP_MODE=dev"
+            "WIF connector is for the hosted platform; use FTP_MODE=real "
+            "(own account via ADC) or FTP_MODE=dev"
         )

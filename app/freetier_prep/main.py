@@ -16,12 +16,12 @@ from fastapi.templating import Jinja2Templates
 
 from .artifacts import emit_artifacts
 from .config import Settings
-from .connector import DevConnector
+from .connector import AdcConnector, DevConnector
 from .db import Database
 from .fake_gcp import FakeGCP, SESSION_LABEL
 from .labs import LABS
-from .preflight import run_preflight
-from .provisioner import SimulatedProvisioner
+from .preflight import run_preflight, run_preflight_real
+from .provisioner import SimulatedProvisioner, TerraformProvisioner
 from .signing import TranscriptSigner
 from .teardown import force_sweep, teardown_session
 from .ttl import Clock, FakeClock, TTLScheduler
@@ -35,9 +35,23 @@ def create_app(settings: Settings | None = None, clock: Clock | None = None) -> 
     settings.ensure_dirs()
     clock = clock or Clock()
 
-    gcp = FakeGCP()
     db = Database(settings.db_path)
-    provisioner = SimulatedProvisioner(gcp)
+    if settings.mode == "real":
+        if not settings.project_id:
+            raise RuntimeError(
+                "FTP_MODE=real requires FTP_PROJECT=<your-gcp-project-id> "
+                "(and `gcloud auth application-default login` beforehand)")
+        from .real_gcp import RealGCP
+
+        gcp = RealGCP(settings.project_id)
+        provisioner = TerraformProvisioner(
+            gcp, settings.tf_dir, settings.terraform_bin)
+        connector = AdcConnector(gcp, settings.project_id,
+                                 settings.state_bucket or None)
+    else:
+        gcp = FakeGCP()
+        provisioner = SimulatedProvisioner(gcp)
+        connector = DevConnector(gcp)
     scheduler = TTLScheduler(db, gcp, provisioner, clock,
                              max_retries=settings.teardown_max_retries)
 
@@ -48,7 +62,9 @@ def create_app(settings: Settings | None = None, clock: Clock | None = None) -> 
             async def ttl_loop():
                 while True:
                     await asyncio.sleep(settings.ttl_check_interval)
-                    scheduler.check_expired()
+                    # real mode runs terraform subprocesses — keep them off
+                    # the event loop
+                    await asyncio.to_thread(scheduler.check_expired)
             task = asyncio.create_task(ttl_loop())
         yield
         if task:
@@ -66,8 +82,13 @@ def create_app(settings: Settings | None = None, clock: Clock | None = None) -> 
     app.state.provisioner = provisioner
     app.state.scheduler = scheduler
     app.state.clock = clock
-    app.state.connector = DevConnector(gcp)
+    app.state.connector = connector
     app.state.signer = TranscriptSigner(settings.keys_dir)
+
+    def preflight_for(user, lab) -> dict:
+        if settings.mode == "real":
+            return run_preflight_real(gcp, lab, settings.terraform_bin)
+        return run_preflight(gcp, user["project_id"], lab)
 
     # -- helpers -----------------------------------------------------------
     def current_user(request: Request):
@@ -98,13 +119,17 @@ def create_app(settings: Settings | None = None, clock: Clock | None = None) -> 
         lab = LABS.get(lab_id)
         if lab is None:
             raise HTTPException(404, f"unknown lab {lab_id}")
-        pf = run_preflight(gcp, user["project_id"], lab)
+        pf = preflight_for(user, lab)
         if not pf["ok"]:
             raise HTTPException(412, detail={"preflight": pf})
         if db.active_session_for_project(user["project_id"]):
             raise HTTPException(
                 409, "a lab is already running in this project — end or resume it")
-        bucket = f"freetier-prep-{user['email'].split('@')[0].split('.')[0]}-state"
+        if settings.mode == "real":
+            bucket = app.state.connector.state_bucket
+        else:
+            bucket = (f"freetier-prep-"
+                      f"{user['email'].split('@')[0].split('.')[0]}-state")
         gcp.ensure_bucket(user["project_id"], bucket)
         session = db.create_session(
             user["id"], user["project_id"], lab_id, f"gs://{bucket}",
@@ -155,7 +180,7 @@ def create_app(settings: Settings | None = None, clock: Clock | None = None) -> 
     @app.get("/api/preflight")
     async def api_preflight(request: Request, lab_id: str = "first-vpc"):
         user = require_user(request)
-        return run_preflight(gcp, user["project_id"], LABS[lab_id])
+        return preflight_for(user, LABS[lab_id])
 
     @app.post("/api/start")
     async def api_start(request: Request, body: dict):
@@ -183,6 +208,10 @@ def create_app(settings: Settings | None = None, clock: Clock | None = None) -> 
 
     @app.post("/api/session/{session_id}/task/{task_id}/simulate")
     async def api_simulate(request: Request, session_id: str, task_id: str):
+        if settings.mode == "real":
+            raise HTTPException(
+                403, "simulate is dev-mode only — in real mode, do the task "
+                     "in your actual GCP console, then hit validate")
         _user, session = owned_session(request, session_id)
         if session["status"] != "active":
             raise HTTPException(409, "session is not active")
@@ -241,10 +270,10 @@ def create_app(settings: Settings | None = None, clock: Clock | None = None) -> 
     @app.get("/", response_class=HTMLResponse)
     async def home(request: Request):
         user = current_user(request)
-        ctx: dict = {"user": user, "labs": LABS.values()}
+        ctx: dict = {"user": user, "labs": LABS.values(),
+                     "mode": settings.mode}
         if user:
-            ctx["preflight"] = run_preflight(
-                gcp, user["project_id"], LABS["first-vpc"])
+            ctx["preflight"] = preflight_for(user, LABS["first-vpc"])
             sessions = [s for s in db.all_sessions()
                         if s["user_id"] == user["id"]]
             ctx["sessions"] = sessions
@@ -270,11 +299,14 @@ def create_app(settings: Settings | None = None, clock: Clock | None = None) -> 
     async def lab_page(request: Request, session_id: str):
         user, session = owned_session(request, session_id)
         view = session_view(user, session)
-        live = gcp.list_resources(session["project_id"],
-                                  label=(SESSION_LABEL, session_id))
+        if settings.mode == "real":
+            live = [r["name"] for r in gcp.lab_resource_survey()]
+        else:
+            live = [r.name for r in gcp.list_resources(
+                session["project_id"], label=(SESSION_LABEL, session_id))]
         return templates.TemplateResponse(request, "lab.html", {
-            "user": user, **view,
-            "live_resources": [r.name for r in live],
+            "user": user, **view, "mode": settings.mode,
+            "live_resources": live,
         })
 
     @app.post("/lab/{session_id}/task/{task_id}/{action}")

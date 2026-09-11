@@ -6,7 +6,9 @@ state bucket — the platform never stores it. TerraformProvisioner (prod)
 will shell out to real terraform; interface identical, wiring swap only.
 """
 
+import subprocess
 import time
+from pathlib import Path
 
 from .fake_gcp import SESSION_LABEL, FakeGCP
 
@@ -92,10 +94,61 @@ class SimulatedProvisioner(Provisioner):
 
 
 class TerraformProvisioner(Provisioner):
-    """Production engine — real terraform apply/destroy. Not in MVP dev scope."""
+    """Own-account mode: real terraform apply/destroy against the user's
+    project, state in their GCS bucket (backend gcs, prefix sessions/<id>).
 
-    def apply(self, project_id, session_id, bucket, lab):
-        raise NotImplementedError("real terraform is production-only")
+    Destroy is state-driven (canonical), then sweeps surviving lab-known
+    names (student task resources created outside terraform), then surveys
+    for zero. Any subprocess failure raises — teardown.py owns retries.
+    """
 
-    def destroy(self, project_id, session_id, bucket):
-        raise NotImplementedError("real terraform is production-only")
+    def __init__(self, gcp, workdir_root, terraform_bin: str = "terraform"):
+        self.gcp = gcp  # RealGCP
+        self.workdir_root = Path(workdir_root)
+        self.tf = terraform_bin
+
+    def _workdir(self, session_id: str, bucket: str, lab: dict | None) -> Path:
+        wd = self.workdir_root / session_id
+        wd.mkdir(parents=True, exist_ok=True)
+        if lab is not None:
+            (wd / "main.tf").write_text(lab["hcl_base"])
+        (wd / "backend.tf").write_text(
+            'terraform {\n  backend "gcs" {\n'
+            f'    bucket = "{bucket}"\n'
+            f'    prefix = "sessions/{session_id}"\n'
+            "  }\n}\n")
+        (wd / "terraform.tfvars").write_text(
+            f'project = "{self.gcp.project_id}"\n')
+        return wd
+
+    def _run(self, wd: Path, *args: str) -> str:
+        proc = subprocess.run(
+            [self.tf, *args], cwd=wd, capture_output=True, text=True,
+            timeout=1800)
+        if proc.returncode != 0:
+            tail = (proc.stderr or proc.stdout)[-2000:]
+            raise RuntimeError(f"terraform {args[0]} failed: {tail}")
+        return proc.stdout
+
+    def apply(self, project_id: str, session_id: str, bucket: str, lab: dict) -> dict:
+        wd = self._workdir(session_id, bucket, lab)
+        self._run(wd, "init", "-input=false", "-no-color")
+        self._run(wd, "apply", "-input=false", "-auto-approve", "-no-color")
+        return {"resources": self.gcp.lab_resource_survey()}
+
+    def destroy(self, project_id: str, session_id: str, bucket: str) -> dict:
+        from .labs import LABS
+
+        wd = self.workdir_root / session_id
+        if not (wd / "main.tf").exists():
+            # e.g. TTL fired after a restart — regenerate the module files
+            wd = self._workdir(session_id, bucket, LABS["first-vpc"])
+            self._run(wd, "init", "-input=false", "-no-color")
+        self._run(wd, "destroy", "-input=false", "-auto-approve", "-no-color")
+        swept = self.gcp.sweep_lab_resources()
+        remaining = [r["name"] for r in self.gcp.lab_resource_survey()]
+        return {"destroyed": swept or ["(terraform state)"],
+                "remaining": remaining}
+
+    def session_resource_manifest(self, project_id, session_id, bucket):
+        return self.gcp.lab_resource_survey()

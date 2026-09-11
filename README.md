@@ -36,3 +36,56 @@ public verify page. Artifacts land in `app/var/out/<user>/first-vpc/`.
 Trust rules hold even in dev: the platform DB stores only the session
 manifest — Terraform state lives in the student's bucket, and teardown only
 ever touches resources labeled `freetier-prep-session=<id>`.
+
+## Own-account mode: run against YOUR real GCP project
+
+Real mode provisions **real infrastructure with real Terraform** into your
+own project, using your local Application Default Credentials — no key
+files, no WIF ceremony needed when you operate the app yourself.
+
+**Prerequisites** (on your machine):
+
+1. `gcloud auth application-default login`
+2. `terraform` installed (first `terraform init` downloads the Google
+   provider, so the machine needs registry.terraform.io access)
+3. A personal project with billing linked and APIs enabled:
+   `gcloud services enable compute.googleapis.com iam.googleapis.com storage.googleapis.com`
+
+**Run:**
+
+```bash
+FTP_MODE=real FTP_PROJECT=<your-project-id> ./app/run.sh
+```
+
+What changes vs dev mode:
+
+- Pre-flight really checks billing, enabled APIs, and the terraform binary
+  before anything provisions.
+- Start Lab runs `terraform apply` of the base module (custom VPC, subnet,
+  e2-micro VM, and the deliberately over-permissive firewall rule). State
+  goes to `gs://freetier-prep-state-<project>/sessions/<id>/` in **your**
+  bucket (override with `FTP_STATE_BUCKET`).
+- The "do it (dev)" buttons disappear — you do the tasks in your **real
+  GCP console**, then hit validate; validators read your project's live
+  firewall rules, subnets, IAM policy, bucket config.
+- End Lab / TTL runs `terraform destroy`, then sweeps any surviving
+  lab-created resources and surveys for zero. In real GCP,
+  networks/firewalls can't carry labels, so the sweep boundary is the
+  lab's fixed `ftp-lab-*` name set — it never touches anything else.
+
+**First-run safety checklist** (the product's own zero-surprise-bill bar):
+
+- Use a personal project, not your employer's org (org policies commonly
+  block pieces of this, and the pre-flight will tell you).
+- Set a budget alert on the project first
+  (Billing → Budgets & alerts → $1 threshold is fine).
+- The module is sized for the always-free tier (e2-micro, no external
+  services), but watch the first full Start → End cycle to completion and
+  confirm the console shows zero `ftp-lab-*` resources at the end.
+- If teardown ever fails, `/ops` shows the escalation with the exact
+  resource manifest and a force-sweep button; everything is also
+  deletable by hand — every resource starts with `ftp-lab-`.
+
+Real mode has not been exercised against live GCP from CI — the loop
+logic is E2E-tested in dev mode, HCL parses clean, and the REST reads are
+best-effort verified. Treat your first run as a supervised one.

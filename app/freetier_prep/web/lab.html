@@ -24,11 +24,13 @@
           <span class="muted">{{ t.instructions }}</span></td>
       <td style="white-space:nowrap">
         {% if session.status == 'active' and not t.validated %}
+        {% if mode != 'real' %}
         <form class="inline" method="post"
               action="/lab/{{ session.id }}/task/{{ t.id }}/simulate">
           <button class="ghost" title="Dev mode: perform the console action">
             do it (dev)</button>
         </form>
+        {% endif %}
         <form class="inline" method="post"
               action="/lab/{{ session.id }}/task/{{ t.id }}/validate">
           <button>validate</button>

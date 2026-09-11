@@ -104,8 +104,9 @@ TASKS = [
     },
     {
         "id": "t07", "title": "Create a uniform-access bucket",
-        "instructions": "Create bucket ftp-lab-assets with uniform bucket-level "
-                        "access enabled.",
+        "instructions": "Create bucket ftp-lab-assets (real mode: "
+                        "ftp-lab-assets-<project-id>, names are global) with "
+                        "uniform bucket-level access enabled.",
         "validator": {"kind": "config", "resource": "ftp-lab-assets",
                       "expect": {"uniform_access": True},
                       "explain": "The bucket must exist with uniform bucket-level "
@@ -169,10 +170,84 @@ TASKS = [
     },
 ]
 
+# What the platform provisions at Start Lab (real mode: terraform apply).
+# Deliberately includes the over-permissive allow-all rule (t05/t12) and a
+# bare VM (no tags/labels/static IP) — the student earns the rest by hand.
+BASE_HCL = """terraform {
+  required_providers {
+    google = { source = "hashicorp/google", version = "~> 6.0" }
+  }
+}
+
+variable "project" { type = string }
+variable "region" {
+  type    = string
+  default = "us-central1"
+}
+variable "zone" {
+  type    = string
+  default = "us-central1-a"
+}
+
+provider "google" {
+  project = var.project
+  region  = var.region
+  zone    = var.zone
+}
+
+resource "google_compute_network" "lab" {
+  name                    = "ftp-lab-net"
+  auto_create_subnetworks = false
+}
+
+resource "google_compute_subnetwork" "lab" {
+  name          = "ftp-lab-subnet"
+  network       = google_compute_network.lab.id
+  ip_cidr_range = "10.0.1.0/24"
+  region        = var.region
+}
+
+resource "google_compute_firewall" "allow_all" {
+  name          = "ftp-lab-allow-all"
+  network       = google_compute_network.lab.id
+  source_ranges = ["0.0.0.0/0"]
+  allow { protocol = "all" }
+}
+
+resource "google_compute_instance" "lab" {
+  name         = "ftp-lab-vm"
+  machine_type = "e2-micro"
+  zone         = var.zone
+  boot_disk {
+    initialize_params { image = "debian-cloud/debian-12" }
+  }
+  network_interface {
+    subnetwork = google_compute_subnetwork.lab.id
+  }
+}
+"""
+
+# The end-state module emitted as the student's portfolio artifact.
 HCL = """terraform {
   required_providers {
     google = { source = "hashicorp/google", version = "~> 6.0" }
   }
+}
+
+variable "project" { type = string }
+variable "region" {
+  type    = string
+  default = "us-central1"
+}
+variable "zone" {
+  type    = string
+  default = "us-central1-a"
+}
+
+provider "google" {
+  project = var.project
+  region  = var.region
+  zone    = var.zone
 }
 
 resource "google_compute_network" "lab" {
@@ -217,7 +292,7 @@ resource "google_compute_address" "lab_internal" {
 resource "google_compute_instance" "lab" {
   name         = "ftp-lab-vm"
   machine_type = "e2-micro"
-  zone         = "us-central1-a"
+  zone         = var.zone
   tags         = ["ssh-target"]
   labels       = { env = "lab" }
   boot_disk {
@@ -230,11 +305,32 @@ resource "google_compute_instance" "lab" {
 }
 
 resource "google_storage_bucket" "assets" {
-  name                        = "ftp-lab-assets"
+  name                        = "ftp-lab-assets-${var.project}"
   location                    = "US"
   uniform_bucket_level_access = true
 }
 """
+
+# Real-mode index: how each lab-known resource name maps onto GCP APIs.
+# This fixed name set IS the blast-radius boundary in real mode (GCP
+# networks/subnets/firewalls don't support labels, so name scope replaces
+# label scope there). Bucket names are globally unique → project suffix.
+REAL_RESOURCE_INDEX = {
+    NET: {"api": "network"},
+    SUBNET: {"api": "subnetwork", "region": "us-central1"},
+    "ftp-lab-subnet-east": {"api": "subnetwork", "region": "us-east1"},
+    VM: {"api": "instance", "zone": "us-central1-a"},
+    BAD_RULE: {"api": "firewall"},
+    "ftp-lab-allow-iap-ssh": {"api": "firewall"},
+    "ftp-lab-assets": {"api": "bucket", "name_suffix_project": True},
+    "ftp-lab-ip": {"api": "address", "region": "us-central1"},
+}
+
+# Deletion order for real-mode force-sweep (dependents before networks).
+REAL_SWEEP_ORDER = [
+    VM, "ftp-lab-ip", BAD_RULE, "ftp-lab-allow-iap-ssh", "ftp-lab-assets",
+    "ftp-lab-subnet-east", SUBNET, NET,
+]
 
 LAB = {
     "id": "first-vpc",
@@ -245,4 +341,5 @@ LAB = {
     "base_resources": BASE_RESOURCES,
     "tasks": TASKS,
     "hcl": HCL,
+    "hcl_base": BASE_HCL,
 }

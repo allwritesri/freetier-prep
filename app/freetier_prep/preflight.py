@@ -68,3 +68,61 @@ def run_preflight(gcp: FakeGCP, project_id: str, lab: dict) -> dict:
         "checks": [c.to_dict() for c in checks],
         "credit_estimate_usd": estimate,
     }
+
+
+def run_preflight_real(gcp, lab: dict, terraform_bin: str) -> dict:
+    """Own-account mode gate: real billing/API reads + terraform present.
+
+    Quota and org-policy become advisory here (the APIs to check them
+    reliably need per-metric wiring; deferred) — the gate still blocks on
+    the failures that would strand a half-provisioned lab.
+    """
+    import shutil
+
+    checks: list[Check] = []
+
+    tf = shutil.which(terraform_bin) is not None
+    checks.append(Check(
+        id="terraform", name="terraform binary available", ok=tf,
+        remediation="" if tf else
+        "Install terraform (https://developer.hashicorp.com/terraform/install)"
+        " or set FTP_TERRAFORM_BIN.",
+    ))
+
+    try:
+        billing = gcp.billing_linked()
+        billing_err = ""
+    except Exception as exc:  # ADC missing/expired, API disabled, etc.
+        billing, billing_err = False, str(exc)[:200]
+    checks.append(Check(
+        id="billing", name="Billing linked", ok=billing,
+        remediation="" if billing else
+        (billing_err or "Link a billing account (Console → Billing → Link)."),
+    ))
+
+    try:
+        missing = REQUIRED_APIS - gcp.enabled_apis()
+    except Exception as exc:
+        missing = REQUIRED_APIS
+        checks.append(Check(id="apis_probe", name="API probe", ok=False,
+                            remediation=str(exc)[:200]))
+    checks.append(Check(
+        id="apis", name="Required APIs enabled", ok=not missing,
+        remediation="" if not missing else
+        "Enable: " + ", ".join(sorted(missing)) +
+        f"  (gcloud services enable {' '.join(sorted(missing))})",
+    ))
+
+    estimate = float(lab.get("credit_estimate_usd", 0.0))
+    checks.append(Check(
+        id="credit", name=f"Credit estimate ${estimate:.2f}", ok=True,
+        remediation="Sized for the always-free tier — but this is REAL "
+                    "infrastructure in YOUR project. Set a budget alert and "
+                    "watch the first run.",
+    ))
+
+    return {
+        "ok": all(c.ok for c in checks),
+        "checks": [c.to_dict() for c in checks],
+        "credit_estimate_usd": estimate,
+    }
