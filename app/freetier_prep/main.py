@@ -241,7 +241,7 @@ def create_app(settings: Settings | None = None, clock: Clock | None = None) -> 
     @app.get("/", response_class=HTMLResponse)
     async def home(request: Request):
         user = current_user(request)
-        ctx: dict = {"request": request, "user": user, "labs": LABS.values()}
+        ctx: dict = {"user": user, "labs": LABS.values()}
         if user:
             ctx["preflight"] = run_preflight(
                 gcp, user["project_id"], LABS["first-vpc"])
@@ -251,7 +251,7 @@ def create_app(settings: Settings | None = None, clock: Clock | None = None) -> 
             ctx["active"] = next(
                 (s for s in sessions if s["status"] == "active"), None)
             ctx["notifications"] = db.notifications_for(user["id"])[:5]
-        return templates.TemplateResponse("dashboard.html", ctx)
+        return templates.TemplateResponse(request, "dashboard.html", ctx)
 
     @app.post("/connect")
     async def form_connect(email: str = Form(...)):
@@ -272,8 +272,8 @@ def create_app(settings: Settings | None = None, clock: Clock | None = None) -> 
         view = session_view(user, session)
         live = gcp.list_resources(session["project_id"],
                                   label=(SESSION_LABEL, session_id))
-        return templates.TemplateResponse("lab.html", {
-            "request": request, "user": user, **view,
+        return templates.TemplateResponse(request, "lab.html", {
+            "user": user, **view,
             "live_resources": [r.name for r in live],
         })
 
@@ -303,15 +303,14 @@ def create_app(settings: Settings | None = None, clock: Clock | None = None) -> 
         valid = bool(row) and app.state.signer.verify(
             row["payload"], row["signature"])
         payload = json.loads(row["payload"]) if (row and valid) else None
-        return templates.TemplateResponse("verify.html", {
-            "request": request, "transcript_id": transcript_id,
+        return templates.TemplateResponse(request, "verify.html", {
+            "transcript_id": transcript_id,
             "valid": valid, "payload": payload, "found": row is not None,
         })
 
     @app.get("/ops", response_class=HTMLResponse)
     async def ops_page(request: Request):
-        return templates.TemplateResponse("ops.html", {
-            "request": request,
+        return templates.TemplateResponse(request, "ops.html", {
             "sessions": db.all_sessions(),
             "escalations": db.escalations(),
         })
