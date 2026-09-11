@@ -2,7 +2,8 @@
 title: 'MVP E2E lab loop'
 type: 'feature'
 created: '2026-09-02'
-status: 'draft'
+status: 'in-review'
+baseline_commit: 'eb1c858'
 context:
   - '{project-root}/_bmad-output/planning-artifacts/prd.md'
 ---
@@ -61,15 +62,15 @@ Greenfield — all files new, rooted at `app/`.
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `app/freetier_prep/{config,db,fake_gcp}.py` -- foundation: settings, manifest schema, fake GCP with labels/policies/poison -- everything else depends on these
-- [ ] `app/freetier_prep/{connector,preflight}.py` -- dev connect + pre-flight gate returning named checks -- gate before any provisioning
-- [ ] `app/freetier_prep/labs/first_vpc.py` -- resource graph + 12 tasks + HCL template -- single source of truth for module content
-- [ ] `app/freetier_prep/{provisioner,validators}.py` -- simulated apply writing state to student bucket; outcome validators -- core loop mechanics
-- [ ] `app/freetier_prep/{teardown,ttl}.py` -- destroy-from-state, zero-verify, retry/escalate/force-sweep, injectable-clock TTL -- the zero-surprise-bill engine
-- [ ] `app/freetier_prep/{signing,artifacts}.py` -- Ed25519 transcript + Terraform repo emission -- the credential
-- [ ] `app/freetier_prep/main.py` + `web/` -- routes + minimal UI wiring the loop -- makes it runnable/demoable
-- [ ] `app/tests/*` -- three E2E tests covering matrix rows -- proof the loop works
-- [ ] `app/run.sh`, `app/requirements.txt`, `README.md` -- one-command run/test + quickstart docs
+- [x] `app/freetier_prep/{config,db,fake_gcp}.py` -- foundation: settings, manifest schema, fake GCP with labels/policies/poison -- everything else depends on these
+- [x] `app/freetier_prep/{connector,preflight}.py` -- dev connect + pre-flight gate returning named checks -- gate before any provisioning
+- [x] `app/freetier_prep/labs/first_vpc.py` -- resource graph + 12 tasks + HCL template -- single source of truth for module content
+- [x] `app/freetier_prep/{provisioner,validators}.py` -- simulated apply writing state to student bucket; outcome validators -- core loop mechanics
+- [x] `app/freetier_prep/{teardown,ttl}.py` -- destroy-from-state, zero-verify, retry/escalate/force-sweep, injectable-clock TTL -- the zero-surprise-bill engine
+- [x] `app/freetier_prep/{signing,artifacts}.py` -- Ed25519 transcript + Terraform repo emission -- the credential
+- [x] `app/freetier_prep/main.py` + `web/` -- routes + minimal UI wiring the loop -- makes it runnable/demoable
+- [x] `app/tests/*` -- three E2E tests covering matrix rows -- proof the loop works
+- [x] `app/run.sh`, `app/requirements.txt`, `README.md` -- one-command run/test + quickstart docs
 
 **Acceptance Criteria:**
 - Given a fresh clone with Python 3.11, when `./app/run.sh test` runs, then all E2E tests pass with no network access or credentials.

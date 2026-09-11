@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Transcript verification{% endblock %}
+{% block content %}
+<h1>Transcript verification</h1>
+{% if not found %}
+<div class="card"><p class="bad">No transcript with id
+<code>{{ transcript_id }}</code>. Link error — ask the candidate for a fresh
+link.</p></div>
+{% elif not valid %}
+<div class="card"><p class="bad">✘ Signature INVALID. This transcript does not
+match what freetier-prep attested. Treat it as unverified.</p></div>
+{% else %}
+<div class="card">
+  <p class="ok">✔ Signature valid — attested by freetier-prep.</p>
+  <table>
+    <tr><th>Candidate</th><td>{{ payload.user_email }}</td></tr>
+    <tr><th>Module</th><td>{{ payload.lab_title }}</td></tr>
+    <tr><th>Tasks validated</th><td>{{ payload.tasks | length }}</td></tr>
+    <tr><th>Artifact repo</th><td><code>{{ payload.artifact_repo_ref }}</code>
+        <span class="muted">(referenced, not load-bearing)</span></td></tr>
+  </table>
+  <h2>Validated outcomes</h2>
+  <ul>
+    {% for t in payload.tasks %}<li>{{ t.title }}</li>{% endfor %}
+  </ul>
+  <p class="muted">All work ran hands-on in the candidate's own GCP project —
+  not a sandbox.</p>
+</div>
+{% endif %}
+{% endblock %}
